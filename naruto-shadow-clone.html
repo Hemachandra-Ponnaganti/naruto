@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Naruto Shadow Clone Jutsu</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  #container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Hidden video source */
+  #inputVideo {
+    position: absolute;
+    width: 1px; height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Main canvas - shows camera + clones */
+  #mainCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+
+  /* Smoke/effect canvas on top */
+  #fxCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  /* UI overlay */
+  #ui {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  #status {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255,160,0,0.9);
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-shadow: 0 0 20px rgba(255,100,0,0.8);
+    white-space: nowrap;
+  }
+
+  #jutsuBanner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    color: #ff6600;
+    font-size: clamp(20px, 5vw, 48px);
+    font-weight: bold;
+    letter-spacing: 6px;
+    text-shadow: 0 0 40px #ff3300, 0 0 80px #ff6600;
+    white-space: nowrap;
+    opacity: 0;
+    transition: none;
+    pointer-events: none;
+  }
+
+  #jutsuBanner.show {
+    animation: bannerPop 1.5s ease-out forwards;
+  }
+
+  @keyframes bannerPop {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+    20%  { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+    40%  { transform: translate(-50%, -50%) scale(0.95); }
+    60%  { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
+    80%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+  }
+
+  #startScreen {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    gap: 20px;
+  }
+
+  #startScreen h1 {
+    color: #ff6600;
+    font-size: clamp(18px, 4vw, 36px);
+    letter-spacing: 4px;
+    text-shadow: 0 0 30px #ff3300;
+    text-align: center;
+  }
+
+  #startScreen p {
+    color: rgba(255,200,100,0.7);
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-align: center;
+    max-width: 400px;
+    line-height: 1.8;
+    padding: 0 20px;
+  }
+
+  #startBtn {
+    margin-top: 10px;
+    padding: 14px 40px;
+    background: transparent;
+    border: 2px solid #ff6600;
+    color: #ff6600;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    letter-spacing: 4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.3s;
+    text-shadow: 0 0 10px #ff3300;
+    box-shadow: 0 0 20px rgba(255,100,0,0.3);
+  }
+
+  #startBtn:hover {
+    background: rgba(255,100,0,0.15);
+    box-shadow: 0 0 40px rgba(255,100,0,0.6);
+    transform: scale(1.05);
+  }
+
+  #loadingBar {
+    width: 200px;
+    height: 2px;
+    background: rgba(255,100,0,0.2);
+    border-radius: 2px;
+    overflow: hidden;
+    display: none;
+  }
+
+  #loadingFill {
+    height: 100%;
+    background: #ff6600;
+    width: 0%;
+    transition: width 0.3s;
+    box-shadow: 0 0 10px #ff3300;
+  }
+
+  #loadingText {
+    color: rgba(255,160,50,0.6);
+    font-size: 11px;
+    letter-spacing: 2px;
+    display: none;
+  }
+
+  #gestureHint {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    color: rgba(255,200,100,0.6);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-align: right;
+    line-height: 1.8;
+  }
+
+  #confidenceMeter {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  #confidenceMeter.visible { opacity: 1; }
+
+  .meter-label {
+    color: rgba(255,200,100,0.5);
+    font-size: 10px;
+    letter-spacing: 2px;
+  }
+
+  .meter-bar {
+    width: 120px;
+    height: 3px;
+    background: rgba(255,100,0,0.2);
+    border-radius: 2px;
+  }
+
+  .meter-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #ff6600, #ffcc00);
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.1s;
+    box-shadow: 0 0 6px #ff3300;
+  }
+</style>
+</head>
+<body>
+
+<div id="container">
+  <video id="inputVideo" autoplay playsinline muted></video>
+  <canvas id="mainCanvas"></canvas>
+  <canvas id="fxCanvas"></canvas>
+
+  <div id="ui">
+    <div id="jutsuBanner">✦ KAGE BUNSHIN NO JUTSU ✦</div>
+    <div id="status">INITIALIZING...</div>
+    <div id="gestureHint">
+      HOLD BOTH HANDS UP<br>
+      MAKE A FINGER GUN / POINT<br>
+      WITH BOTH HANDS
+    </div>
+    <div id="confidenceMeter">
+      <div class="meter-label">CHAKRA CHARGE</div>
+      <div class="meter-bar"><div class="meter-fill" id="meterFill"></div></div>
+    </div>
+  </div>
+
+  <div id="startScreen">
+    <h1>⚡ KAGE BUNSHIN ⚡</h1>
+    <p>
+      This app uses your webcam to detect hand signs.<br>
+      When you hold up both index fingers, your shadow clones will appear!
+    </p>
+    <button id="startBtn" onclick="startApp()">ACTIVATE JUTSU</button>
+    <div id="loadingBar"><div id="loadingFill"></div></div>
+    <div id="loadingText">LOADING MEDIAPIPE...</div>
+  </div>
+</div>
+
+<!-- MediaPipe via CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+
+<script>
+const video = document.getElementById('inputVideo');
+const mainCanvas = document.getElementById('mainCanvas');
+const fxCanvas = document.getElementById('fxCanvas');
+const mCtx = mainCanvas.getContext('2d');
+const fCtx = fxCanvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const jutsuBanner = document.getElementById('jutsuBanner');
+const meterFill = document.getElementById('meterFill');
+const confidenceMeter = document.getElementById('confidenceMeter');
+
+let W = window.innerWidth, H = window.innerHeight;
+mainCanvas.width = fxCanvas.width = W;
+mainCanvas.height = fxCanvas.height = H;
+
+window.addEventListener('resize', () => {
+  W = window.innerWidth; H = window.innerHeight;
+  mainCanvas.width = fxCanvas.width = W;
+  mainCanvas.height = fxCanvas.height = H;
+});
+
+// ─── State ───────────────────────────────────────────────
+let segmentationMask = null;
+let holisticResults = null;
+let clones = [];
+let smokeParticles = [];
+let jutsuActive = false;
+let jutsuCooldown = 0;
+let chakraCharge = 0;
+let frameN = 0;
+
+// ─── Clone Config ─────────────────────────────────────────
+const CLONE_POSITIONS = [
+  { dx: -0.28, dy: 0,    delay: 0   },
+  { dx:  0.28, dy: 0,    delay: 80  },
+  { dx: -0.5,  dy: 0.05, delay: 160 },
+  { dx:  0.5,  dy: 0.05, delay: 160 },
+];
+
+// ─── Smoke Particle ───────────────────────────────────────
+class Smoke {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.vx = (Math.random()-0.5)*3;
+    this.vy = -Math.random()*2-1;
+    this.r = Math.random()*30+15;
+    this.life = 1;
+    this.gray = Math.floor(Math.random()*60+30);
+    this.rot = Math.random()*Math.PI*2;
+    this.rotV = (Math.random()-0.5)*0.04;
+  }
+  update() {
+    this.x += this.vx; this.y += this.vy;
+    this.vx *= 0.97; this.vy *= 0.97;
+    this.r  *= 1.02;
+    this.life -= 0.018;
+    this.rot += this.rotV;
+  }
+  draw(ctx) {
+    if(this.life <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = this.life * 0.5;
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rot);
+    const g = ctx.createRadialGradient(0,0,0,0,0,this.r);
+    g.addColorStop(0, `rgba(${this.gray},${this.gray},${this.gray},0.8)`);
+    g.addColorStop(1, `rgba(${this.gray},${this.gray},${this.gray},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0,0,this.r,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ─── Clone ────────────────────────────────────────────────
+class ShadowClone {
+  constructor(cfg, playerCanvas) {
+    this.cfg = cfg;
+    this.playerCanvas = playerCanvas;
+    this.life = 0;
+    this.maxLife = 90;
+    this.born = false;
+    this.delay = cfg.delay;
+    this.timer = 0;
+    this.smokeSpawned = false;
+  }
+  update() {
+    this.timer++;
+    if(this.timer < this.delay) return;
+    if(!this.born) {
+      this.born = true;
+      this.spawnSmoke();
+    }
+    this.life = Math.min(this.life + 2, this.maxLife);
+  }
+  spawnSmoke() {
+    const cx = W/2 + this.cfg.dx * W;
+    const cy = H/2 + this.cfg.dy * H;
+    for(let i=0; i<20; i++) {
+      smokeParticles.push(new Smoke(cx + (Math.random()-0.5)*80, cy + H*0.3));
+    }
+  }
+  draw(ctx) {
+    if(!this.born || this.life <= 0) return;
+    const alpha = Math.min(this.life/20, 1) * 0.85;
+    const cx = W/2 + this.cfg.dx * W;
+    const cy = H/2 + this.cfg.dy * H;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // dark tinted clone silhouette
+    ctx.drawImage(this.playerCanvas, cx - this.playerCanvas.width/2, cy - this.playerCanvas.height/2);
+
+    // dark overlay to make it look like a shadow clone
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(30,30,80,0.6)';
+    ctx.drawImage(this.playerCanvas, cx - this.playerCanvas.width/2, cy - this.playerCanvas.height/2);
+    ctx.globalCompositeOperation = 'source-over';
+
+    ctx.restore();
+  }
+  isDead() { return this.timer > this.delay + this.maxLife + 60; }
+}
+
+// ─── Segmentation canvas ──────────────────────────────────
+const segCanvas = document.createElement('canvas');
+const segCtx = segCanvas.getContext('2d');
+
+// Player silhouette canvas (isolated body)
+const playerCanvas = document.createElement('canvas');
+const pCtx = playerCanvas.getContext('2d');
+
+function updatePlayerCanvas(videoFrame, mask) {
+  const vw = videoFrame.width || W, vh = videoFrame.height || H;
+  segCanvas.width = vw; segCanvas.height = vh;
+  playerCanvas.width = W; playerCanvas.height = H;
+
+  // draw segmentation mask
+  segCtx.drawImage(mask, 0, 0, vw, vh);
+  const maskData = segCtx.getImageData(0, 0, vw, vh);
+
+  // draw video frame
+  segCtx.drawImage(videoFrame, 0, 0, vw, vh);
+  const imgData = segCtx.getImageData(0, 0, vw, vh);
+
+  // apply mask — keep only person pixels
+  for(let i=0; i<maskData.data.length; i+=4) {
+    const confidence = maskData.data[i]; // red channel = person confidence
+    imgData.data[i+3] = confidence;
+  }
+  segCtx.putImageData(imgData, 0, 0);
+
+  // scale to canvas and flip (mirror)
+  pCtx.clearRect(0,0,W,H);
+  pCtx.save();
+  pCtx.scale(-1,1);
+  pCtx.drawImage(segCanvas, -W, 0, W, H);
+  pCtx.restore();
+}
+
+// ─── Gesture Detection ────────────────────────────────────
+function detectGesture(results) {
+  if(!results.leftHandLandmarks && !results.rightHandLandmarks) return 0;
+
+  let score = 0;
+  const hands = [results.leftHandLandmarks, results.rightHandLandmarks].filter(Boolean);
+
+  for(const hand of hands) {
+    if(!hand) continue;
+    // Index finger extended: tip (8) above MCP (5)
+    const indexExtended = hand[8].y < hand[5].y;
+    // Middle finger NOT extended: tip (12) below MCP (9)
+    const middleFolded = hand[12].y > hand[9].y;
+    // Ring finger NOT extended
+    const ringFolded = hand[16].y > hand[13].y;
+    // Pinky NOT extended
+    const pinkyFolded = hand[20].y > hand[17].y;
+
+    if(indexExtended && middleFolded && ringFolded && pinkyFolded) score++;
+  }
+
+  // Both hands making the sign = full score
+  return hands.length > 0 ? score / Math.max(hands.length, 1) : 0;
+}
+
+// ─── Main render loop ─────────────────────────────────────
+function render(videoEl, segMask, hResults) {
+  frameN++;
+  mCtx.clearRect(0,0,W,H);
+  fCtx.clearRect(0,0,W,H);
+
+  // 1. Draw mirrored camera feed as background
+  mCtx.save();
+  mCtx.scale(-1,1);
+  mCtx.drawImage(videoEl, -W, 0, W, H);
+  mCtx.restore();
+
+  // 2. Update player canvas with segmentation
+  if(segMask) updatePlayerCanvas(videoEl, segMask);
+
+  // 3. Gesture detection
+  let gestureScore = 0;
+  if(hResults) gestureScore = detectGesture(hResults);
+
+  // Chakra charge
+  if(gestureScore >= 0.5) {
+    chakraCharge = Math.min(chakraCharge + 2, 100);
+  } else {
+    chakraCharge = Math.max(chakraCharge - 3, 0);
+  }
+  meterFill.style.width = chakraCharge + '%';
+
+  // Trigger jutsu
+  if(chakraCharge >= 100 && jutsuCooldown <= 0 && !jutsuActive) {
+    triggerJutsu();
+  }
+
+  if(jutsuCooldown > 0) jutsuCooldown--;
+
+  // 4. Draw smoke on fx canvas
+  smokeParticles = smokeParticles.filter(s => s.life > 0);
+  for(const s of smokeParticles) { s.update(); s.draw(fCtx); }
+
+  // 5. Draw clones
+  clones = clones.filter(c => !c.isDead());
+  for(const c of clones) {
+    c.update();
+    c.draw(mCtx);
+  }
+
+  // 6. Draw main player on top (center)
+  if(segMask) {
+    mCtx.drawImage(playerCanvas, 0, 0);
+  }
+
+  // Status
+  if(gestureScore >= 0.5) {
+    statusEl.textContent = '⚡ CHAKRA CHARGING... ' + Math.round(chakraCharge) + '%';
+  } else if(jutsuActive) {
+    statusEl.textContent = '✦ KAGE BUNSHIN NO JUTSU ✦';
+  } else {
+    statusEl.textContent = 'SHOW HAND SIGN WITH BOTH HANDS';
+  }
+
+  confidenceMeter.classList.toggle('visible', gestureScore > 0);
+}
+
+function triggerJutsu() {
+  jutsuActive = true;
+  chakraCharge = 0;
+  jutsuCooldown = 180;
+
+  // Spawn clones
+  for(const cfg of CLONE_POSITIONS) {
+    clones.push(new ShadowClone(cfg, playerCanvas));
+  }
+
+  // Big smoke burst at center
+  for(let i=0; i<40; i++) {
+    smokeParticles.push(new Smoke(W/2 + (Math.random()-0.5)*200, H/2 + (Math.random()-0.5)*100));
+  }
+
+  // Banner
+  jutsuBanner.classList.remove('show');
+  void jutsuBanner.offsetWidth;
+  jutsuBanner.classList.add('show');
+
+  setTimeout(() => { jutsuActive = false; }, 3000);
+}
+
+// ─── Setup MediaPipe ──────────────────────────────────────
+async function startApp() {
+  document.getElementById('startBtn').style.display = 'none';
+  document.getElementById('loadingBar').style.display = 'block';
+  document.getElementById('loadingText').style.display = 'block';
+  document.getElementById('loadingText').textContent = 'REQUESTING CAMERA...';
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 1280, height: 720 }, audio: false });
+    video.srcObject = stream;
+    await new Promise(r => video.onloadedmetadata = r);
+    video.play();
+  } catch(e) {
+    document.getElementById('loadingText').textContent = 'CAMERA DENIED. PLEASE ALLOW ACCESS.';
+    return;
+  }
+
+  document.getElementById('loadingText').textContent = 'LOADING SELFIE SEGMENTATION...';
+  document.getElementById('loadingFill').style.width = '20%';
+
+  // Selfie Segmentation
+  let latestMask = null;
+  const selfieSegmentation = new SelfieSegmentation({ locateFile: f =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`
+  });
+  selfieSegmentation.setOptions({ modelSelection: 1 });
+  selfieSegmentation.onResults(r => { latestMask = r.segmentationMask; });
+
+  document.getElementById('loadingFill').style.width = '60%';
+  document.getElementById('loadingText').textContent = 'LOADING HAND TRACKING...';
+
+  // Holistic (for hand landmarks)
+  let latestHolistic = null;
+  const holistic = new Holistic({ locateFile: f =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`
+  });
+  holistic.setOptions({
+    modelComplexity: 1,
+    smoothLandmarks: true,
+    enableSegmentation: false,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+  holistic.onResults(r => { latestHolistic = r; });
+
+  document.getElementById('loadingFill').style.width = '90%';
+  document.getElementById('loadingText').textContent = 'STARTING...';
+
+  // Process frames
+  let frameCount = 0;
+  const processFrame = async () => {
+    if(video.readyState >= 2) {
+      frameCount++;
+      // Alternate between segmentation and holistic to save perf
+      if(frameCount % 2 === 0) await selfieSegmentation.send({ image: video });
+      else await holistic.send({ image: video });
+      render(video, latestMask, latestHolistic);
+    }
+    requestAnimationFrame(processFrame);
+  };
+
+  document.getElementById('loadingFill').style.width = '100%';
+  setTimeout(() => {
+    document.getElementById('startScreen').style.display = 'none';
+    statusEl.textContent = 'SHOW HAND SIGN TO SUMMON CLONES';
+    processFrame();
+  }, 500);
+}
+</script>
+</body>
+</html>
